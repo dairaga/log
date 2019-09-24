@@ -1,150 +1,278 @@
 package log
 
 import (
+	"encoding/json"
 	"fmt"
-	"io"
-	golog "log"
 	"os"
+	"runtime"
 	"strings"
+	"sync"
+	"time"
 )
 
-// Level ...
-type Level uint8
+// Severity ...
+type Severity int
 
-// Level
+// Severity values, see https://godoc.org/google.golang.org/genproto/googleapis/logging/type#LogSeverity.
 const (
-	LvAll Level = 1 + iota
-	LvTrace
-	LvDebug
-	LvInfo
-	LvWarn
-	LvError
-	LvFatal
+	DEFAULT Severity = 100 * iota
+	DEBUG
+	INFO
+	NOTICE
+	WARNING
+	ERROR
+	CRITICAL
+	ALERT
+	EMERGENCY
 )
 
-// DefaultFlags ...
-const DefaultFlags = golog.LstdFlags | golog.Lshortfile | golog.LUTC
-
-func toLevel(x string) Level {
-	switch strings.ToLower(x) {
-	case "all":
-		return LvAll
-	case "trace":
-		return LvTrace
-	case "debug":
-		return LvDebug
-	case "info":
-		return LvInfo
-	case "warn":
-		return LvWarn
-	case "error":
-		return LvError
-	case "fatal", "critical":
-		return LvFatal
+func (s Severity) String() string {
+	switch s {
+	case DEBUG:
+		return "DEBUG"
+	case INFO:
+		return "INFO"
+	case NOTICE:
+		return "NOTICE"
+	case WARNING:
+		return "WARN"
+	case ERROR:
+		return "ERROR"
+	case CRITICAL:
+		return "CRITICAL"
+	case ALERT:
+		return "ALERT"
+	case EMERGENCY:
+		return "EMERGENCY"
 	default:
-		return LvAll
+		return "TRACE"
 	}
 }
 
-var level = LvAll
-var root *golog.Logger
-
-func init() {
-	tmp, _ := os.LookupEnv("LOG_ROOT_LEVEL")
-	level = toLevel(tmp)
-	root = golog.New(os.Stderr, "", DefaultFlags)
+func toSeverity(s string) Severity {
+	switch strings.ToUpper(s) {
+	case "TRACE":
+		return DEFAULT
+	case "DEBUG":
+		return DEBUG
+	case "INFO":
+		return INFO
+	case "NOTICE":
+		return NOTICE
+	case "WARNING", "WARN":
+		return WARNING
+	case "ERROR":
+		return ERROR
+	case "CRITICAL", "FATAL":
+		return CRITICAL
+	case "ALERT":
+		return ALERT
+	case "EMERGENCY":
+		return EMERGENCY
+	default:
+		return DEFAULT
+	}
 }
 
-// SetLevel ...
-func SetLevel(lv Level) {
-	level = lv
+type logmsg struct {
+	now      time.Time
+	severity Severity
+	file     string
+	line     int
+	data     interface{}
 }
 
-// SetOutput ...
-func SetOutput(w io.Writer) {
-	root.SetOutput(w)
+var (
+	pipe    = make(chan logmsg, 2)
+	loggers []Logger
+	lock    = &sync.Mutex{}
+)
+
+func caller(skip int) (string, int) {
+	_, file, no, ok := runtime.Caller(skip)
+	if !ok {
+		return "???", 0
+	}
+
+	return file, no
 }
+
+func output(severity Severity, data interface{}) {
+	file, no := caller(3)
+
+	pipe <- logmsg{
+		now:      time.Now(),
+		severity: severity,
+		file:     file,
+		line:     no,
+		data:     data,
+	}
+}
+
+// ----------------------------------------------------------------------------
 
 // Trace ...
 func Trace(a ...interface{}) {
-	if level <= LvTrace {
-		root.Output(2, "[TRACE] "+fmt.Sprint(a...))
-	}
+	msg := fmt.Sprint(a...)
+	output(DEFAULT, msg)
 }
 
-// Tracef ...
-func Tracef(f string, a ...interface{}) {
-	if level <= LvTrace {
-		root.Output(2, "[TRACE] "+fmt.Sprintf(f, a...))
-	}
+// Trancef ...
+func Trancef(f string, a ...interface{}) {
+	msg := fmt.Sprintf(f, a...)
+	output(DEFAULT, msg)
+}
+
+// TraceJSON ...
+func TraceJSON(a json.RawMessage) {
+	output(DEFAULT, a)
 }
 
 // Debug ...
 func Debug(a ...interface{}) {
-	if level <= LvDebug {
-		root.Output(2, "[DEBUG] "+fmt.Sprint(a...))
-	}
+	msg := fmt.Sprint(a...)
+	output(DEBUG, msg)
 }
 
 // Debugf ...
 func Debugf(f string, a ...interface{}) {
-	if level <= LvDebug {
-		root.Output(2, "[DEBUG] "+fmt.Sprintf(f, a...))
-	}
+	msg := fmt.Sprintf(f, a...)
+	output(DEBUG, msg)
+}
+
+// DebugJSON ...
+func DebugJSON(a json.RawMessage) {
+	output(DEBUG, a)
 }
 
 // Info ...
 func Info(a ...interface{}) {
-	if level <= LvInfo {
-		root.Output(2, "[INFO] "+fmt.Sprint(a...))
-	}
+	msg := fmt.Sprint(a...)
+	output(INFO, msg)
 }
 
 // Infof ...
 func Infof(f string, a ...interface{}) {
-	if level <= LvInfo {
-		root.Output(2, "[INFO] "+fmt.Sprintf(f, a...))
-	}
+	msg := fmt.Sprintf(f, a...)
+	output(INFO, msg)
 }
 
 // Warn ...
 func Warn(a ...interface{}) {
-	if level <= LvWarn {
-		root.Output(2, "[WARN] "+fmt.Sprint(a...))
-	}
+	msg := fmt.Sprint(a...)
+	output(WARNING, msg)
 }
 
 // Warnf ...
 func Warnf(f string, a ...interface{}) {
-	if level <= LvWarn {
-		root.Output(2, "[WARN] "+fmt.Sprintf(f, a...))
-	}
+	msg := fmt.Sprintf(f, a...)
+	output(WARNING, msg)
 }
 
 // Error ...
 func Error(a ...interface{}) {
-	if level <= LvError {
-		root.Output(2, "[ERROR] "+fmt.Sprint(a...))
-	}
+	msg := fmt.Sprint(a...)
+	output(ERROR, msg)
 }
 
 // Errorf ...
 func Errorf(f string, a ...interface{}) {
-	if level <= LvError {
-		root.Output(2, "[Error] "+fmt.Sprintf(f, a...))
-	}
+	msg := fmt.Sprintf(f, a...)
+	output(ERROR, msg)
 }
 
 // Fatal ...
 func Fatal(a ...interface{}) {
-	if level <= LvFatal {
-		root.Output(2, "[FATAL] "+fmt.Sprint(a...))
-	}
+	msg := fmt.Sprint(a...)
+	output(CRITICAL, msg)
 }
 
 // Fatalf ...
 func Fatalf(f string, a ...interface{}) {
-	if level <= LvFatal {
-		root.Output(2, "[FATAL] "+fmt.Sprintf(f, a...))
+	msg := fmt.Sprintf(f, a...)
+	output(CRITICAL, msg)
+}
+
+// Alert ...
+func Alert(a ...interface{}) {
+	msg := fmt.Sprint(a...)
+	output(ALERT, msg)
+}
+
+// Alertf ...
+func Alertf(f string, a ...interface{}) {
+	msg := fmt.Sprintf(f, a...)
+	output(ALERT, msg)
+}
+
+// Emergency ...
+func Emergency(a ...interface{}) {
+	msg := fmt.Sprint(a...)
+	output(EMERGENCY, msg)
+}
+
+// Emergencyf ...
+func Emergencyf(f string, a ...interface{}) {
+	msg := fmt.Sprintf(f, a...)
+	output(EMERGENCY, msg)
+}
+
+// ----------------------------------------------------------------------------
+
+// Register ...
+func Register(l Logger) {
+	lock.Lock()
+	defer lock.Unlock()
+	loggers = append(loggers, l)
+}
+
+// Start start to log.
+func start() {
+
+	for {
+		msg, ok := <-pipe
+		if ok {
+			switch v := msg.data.(type) {
+			case string:
+				for _, l := range loggers {
+					l.Output(msg.now, msg.severity, msg.file, msg.line, v)
+				}
+			case json.RawMessage:
+				for _, l := range loggers {
+					l.OutputJSON(msg.now, msg.severity, msg.file, msg.line, v)
+				}
+			default:
+				for _, l := range loggers {
+					l.OutputStruct(msg.now, msg.severity, msg.file, msg.line, v)
+				}
+			}
+		}
 	}
+}
+
+// Close close all loggers
+func Close(wait time.Duration) {
+	if wait > 0 {
+		time.Sleep(wait)
+	}
+
+	for _, l := range loggers {
+		l.Close()
+	}
+	close(pipe)
+
+}
+
+// ----------------------------------------------------------------------------
+
+func init() {
+	tmp, _ := os.LookupEnv("LOG_ROOT_LEVEL")
+	loggers = append(loggers, &stdlogger{
+		severity: toSeverity(tmp),
+		out:      os.Stderr,
+		mutex:    &sync.Mutex{},
+	})
+
+	initGCPLogger()
+	go start()
 }
