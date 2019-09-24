@@ -28,12 +28,13 @@ type entry struct {
 // ----------------------------------------------------------------------------
 
 func initGCPLogger() {
-	c, err := config.Load("gcp_log.toml")
-	if err != nil {
+	var err error
+	project := config.GetString("log.gcp.project")
+	name := config.GetString("log.gcp.name")
+	if project == "" || name == "" {
 		return
 	}
-	project := c.GetString("log.project")
-	name := c.GetString("log.name")
+
 	cli, err = logging.NewClient(context.Background(), project)
 	if err != nil {
 		fmt.Printf("connect to gcp stackdriver logging: %v\n", err)

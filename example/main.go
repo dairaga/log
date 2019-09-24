@@ -16,6 +16,7 @@ type mydata struct {
 }
 
 func main() {
+	log.Trace("this is trace")
 	log.Debug("debug 哈哈哈")
 	log.Debugf("debug aa: %s", "test")
 

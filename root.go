@@ -3,14 +3,12 @@ package log
 import (
 	"encoding/json"
 	"io"
-	"sync"
 	"time"
 )
 
 type stdlogger struct {
 	severity Severity
 	out      io.WriteCloser
-	mutex    *sync.Mutex
 }
 
 // Cheap integer to fixed-width decimal ASCII. Give a negative width to avoid zero-padding.
@@ -52,14 +50,14 @@ func formatHeader(buf *[]byte, t time.Time, file string, line int) {
 
 	*buf = append(*buf, ' ')
 
-	short := file
+	/*short := file
 	for i := len(file) - 1; i > 0; i-- {
 		if file[i] == '/' {
 			short = file[i+1:]
 			break
 		}
 	}
-	file = short
+	file = short*/
 
 	*buf = append(*buf, file...)
 	*buf = append(*buf, ':')
@@ -79,8 +77,6 @@ func (l *stdlogger) outputstring(now time.Time, severity Severity, file string, 
 		buf = append(buf, '\n')
 	}
 
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
 	l.out.Write(buf)
 }
 
@@ -106,5 +102,5 @@ func (l *stdlogger) OutputStruct(now time.Time, severity Severity, file string, 
 }
 
 func (l *stdlogger) Close() error {
-	return l.out.Close()
+	return nil
 }

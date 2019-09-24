@@ -1,0 +1,10 @@
+[log.root]
+#level="debug"
+
+[log.gcp]
+#project="diviner"
+name="mytest6"
+
+[log.rolling]
+#level="trace"
+prefix="aa"

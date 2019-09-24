@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dairaga/config"
 )
 
 // Severity ...
@@ -83,10 +85,19 @@ type logmsg struct {
 }
 
 var (
-	pipe    = make(chan logmsg, 2)
+	pipe    = make(chan logmsg, 64)
 	loggers []Logger
 	lock    = &sync.Mutex{}
 )
+
+func shortFile(file string) string {
+	for i := len(file) - 1; i >= 0; i-- {
+		if file[i] == '/' {
+			return file[i+1:]
+		}
+	}
+	return file
+}
 
 func caller(skip int) (string, int) {
 	_, file, no, ok := runtime.Caller(skip)
@@ -94,7 +105,7 @@ func caller(skip int) (string, int) {
 		return "???", 0
 	}
 
-	return file, no
+	return shortFile(file), no
 }
 
 func output(severity Severity, data interface{}) {
@@ -266,13 +277,14 @@ func Close(wait time.Duration) {
 // ----------------------------------------------------------------------------
 
 func init() {
-	tmp, _ := os.LookupEnv("LOG_ROOT_LEVEL")
+	tmp := config.GetString("log.root.level")
+
 	loggers = append(loggers, &stdlogger{
 		severity: toSeverity(tmp),
 		out:      os.Stderr,
-		mutex:    &sync.Mutex{},
 	})
 
 	initGCPLogger()
+	initRollingLogger()
 	go start()
 }
